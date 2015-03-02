@@ -1,9 +1,16 @@
-# Handle protocol "message" with mutt handler
-[message]
-module = handler.mutt
-func = handle_message
+# Default browser, if nothing else matches, is Safari.
+[DEFAULT]
+action=safari
 
-# Handle protocol "mailto" by calling program with
-# hierarchical part of the url as argument
-[mailto]
-run = ~/bin/test.sh
+# Requests to app.asana.com goes to Chrome.
+[asana]
+hostname=app.asana.com
+action=chrome
+
+# If the url looks like urldefense.proofpoint.com/v1/url, then take
+# the URL in the query param 'u', and process that through the rules.
+[proofpoint]
+hostname=urldefense.proofpoint.com
+path=/v1/url
+query_select=u
+action=unwrap

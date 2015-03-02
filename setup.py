@@ -8,7 +8,7 @@ Usage:
 from setuptools import setup
 
 APP = ['url-open-handler.py']
-DATA_FILES = ['handler']
+DATA_FILES = []
 OPTIONS = {
     'argv_emulation': False,
     'plist' : {
@@ -16,7 +16,7 @@ OPTIONS = {
         'NSPrincipalClass' : 'NSApplication',
         'NSAppleScriptEnabled' : 'YES',
         'LSUIElement' : 'YES',
-        'CFBundleIdentifier' : 'org.irq0.custom_url_handler',
+        'CFBundleIdentifier' : 'org.merly.custom_url_handler',
         'CFBundleURLTypes' : [
             {
                 'CFBundleURLName' : 'http URL',
