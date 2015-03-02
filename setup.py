@@ -17,15 +17,22 @@ OPTIONS = {
         'NSAppleScriptEnabled' : 'YES',
         'LSUIElement' : 'YES',
         'CFBundleIdentifier' : 'org.irq0.custom_url_handler',
-        'CFBundleURLTypes' : [{
-                'CFBundleURLName' : 'eMail Message',
+        'CFBundleURLTypes' : [
+            {
+                'CFBundleURLName' : 'http URL',
                 'CFBundleURLSchemes' : [
-                    'message',
-                    'mailto',
-                    ]
-                }]
-        }
+                    'http',
+                ]
+            },
+            {
+                'CFBundleURLName' : 'Secure http URL',
+                'CFBundleURLSchemes' : [
+                    'https',
+                ]
+            },
+        ]
     }
+}
 
 setup(
     app=APP,

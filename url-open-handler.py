@@ -1,55 +1,78 @@
 #!/usr/bin/python
 
-import struct
 import os.path
+import struct
 import subprocess
 import re
-import importlib
+import urlparse
 
 from objc import YES, NO, nil, signature
 from AppKit import *
 from Foundation import *
-from PyObjCTools import NibClassBuilder, AppHelper
+from PyObjCTools import AppHelper
 
 import ConfigParser
 
-config = ConfigParser.ConfigParser()
 
-def get_script_for_scheme(scheme):
-    script = os.path.expanduser(config.get(scheme, 'run'))
-    if not os.path.isfile(script):
-        raise Exception("Config Error: Script for {0} is not a file".format(scheme))
+class RuleEvaluator:
+    TTL_DEFAULT = 10
+    BROWSER_MAP = {
+        'safari': '/Applications/Safari.app',
+        'chrome': '/Applications/Google Chrome.app',
+    }
+    SCHEME_KEY = 'scheme'
+    HOSTNAME_KEY = 'hostname'
+    PATH_KEY = 'path'
+    QUERY_SELECT_KEY = 'query_select'
+    ACTION_KEY = 'action'
 
-    return script
+    ACTION_UNWRAP_QUERY = 'unwrap'
 
-def get_py_module_for_scheme(scheme):
-    result = config.get(scheme, 'module')
-    return result
+    def __init__(self):
+        self.config = ConfigParser.ConfigParser()
+        self.config.read(os.path.expanduser('~/Library/Preferences/url-open-handler.cfg'))
 
-def get_py_func_for_scheme(scheme):
-    result = config.get(scheme, 'func')
-    return result
+    def silent_get(self, section, option):
+        if self.config.has_option(section, option):
+            return self.config.get(section, option)
+        return None
 
-def get_run_func(scheme):
-    return [run_script, run_python][int(config.has_option(scheme, 'module'))]
+    def run_rule_against_parsed_url(self, url, parsed, ttl, section):
+        config_scheme = self.silent_get(section, RuleEvaluator.SCHEME_KEY)
+        config_hostname = self.silent_get(section, RuleEvaluator.HOSTNAME_KEY)
+        config_path = self.silent_get(section, RuleEvaluator.PATH_KEY)
+        config_query_select = self.silent_get(section, RuleEvaluator.QUERY_SELECT_KEY)
+        config_action = self.config.get(section, RuleEvaluator.ACTION_KEY)
 
-def run_script(scheme_name, hier_part):
-    NSLog("Running script handler")
-    subprocess.call([get_script_for_scheme(scheme_name), hier_part])
+        if config_scheme is not None and parsed.scheme.lower() != config_scheme.lower():
+            return False
+        if config_hostname is not None and parsed.hostname.lower() != config_hostname.lower():
+            return False
+        if config_path is not None and parsed.path != config_path:
+            return False
 
-def run_python(scheme_name, hier_part):
-    mod_name = get_py_module_for_scheme(scheme_name)
-    func_name = get_py_func_for_scheme(scheme_name)
+        # we have a match!
+        if config_action in RuleEvaluator.BROWSER_MAP:
+            args = ['/usr/bin/open', '-a', RuleEvaluator.BROWSER_MAP[config_action], url]
+            subprocess.call(args)
+            return True
+        elif config_action == RuleEvaluator.ACTION_UNWRAP_QUERY:
+            qs_parsed = urlparse.parse_qs(parsed.query)
+            if config_query_select in qs_parsed:
+                return self.run_rules_against_parsed_url(qs_parsed[config_query_select][0], ttl - 1)
 
-    NSLog("Running python handler mod=%@ func=%@", mod_name, func_name)
+    def run_rules_against_parsed_url(self, url, ttl=TTL_DEFAULT):
+        parsed = urlparse.urlparse(url)
+        if ttl == 0:
+            NSLog("Unable to handle url (ttl expired)")
+            return False
 
-    mod = importlib.import_module(mod_name)
-    func = getattr(mod, func_name)
+        for section in self.config.sections():
+            if self.run_rule_against_parsed_url(url, parsed, ttl, section):
+                return True
 
-    func(hier_part)
+        return self.run_rule_against_parsed_url(url, parsed, ttl, 'DEFAULT')
 
-def run_url(schema_name, hier_part):
-    get_run_func(schema_name)(schema_name, hier_part)
 
 class AppDelegate(NSObject):
 
@@ -72,18 +95,16 @@ class AppDelegate(NSObject):
         keyDirectObject = struct.unpack(">i", "----")[0]
         url = event.paramDescriptorForKeyword_(keyDirectObject).stringValue().decode('utf8')
 
-        urlPattern = re.compile(r"^(.*?)://(.*)$")
-        match = urlPattern.match(url)
-
-        schema = match.group(1)
-        hier_part = match.group(2)
-
         NSLog("Received URL: %@", url)
-        run_url(schema, hier_part)
+        evaluator = RuleEvaluator()
+        try:
+            if evaluator.run_rules_against_parsed_url(url) == False:
+                NSLog("Unable to handle URL: %@", url)
+        except Exception as ex:
+            NSLog("got an exc: %@", ex)
+            raise
 
 def main():
-    config.read(os.path.expanduser('~/Library/Preferences/url-open-handler.cfg'))
-
     app = NSApplication.sharedApplication()
 
     delegate = AppDelegate.alloc().init()
